@@ -1,0 +1,25 @@
+# --- data collection ---
+yfinance
+openmeteo-requests
+httpx
+
+# --- data engineering ---
+pandas
+numpy
+matplotlib
+seaborn
+pyarrow
+scipy
+great-expectations
+
+# --- utilities ---
+pyyaml
+python-dotenv
+joblib
+tqdm
+
+# ─── Jupyter ────────────────────
+jupyter
+jupyterlab
+nbconvert
+ipywidgets

@@ -1,0 +1,55 @@
+project:
+  name: ts-forecast
+  description: "Prévision de séries temporelles météo + finance"
+  seed: 42
+  target: "meteo_temperature_2m"
+  horizon_hours: 24
+
+data:
+  start_date: "2018-01-01"
+  end_date:   "2024-12-31"
+  train_ratio: 0.80
+  val_ratio:   0.10
+
+openmeteo:
+  latitude:  48.8566      # Paris
+  longitude: 2.3522
+  timezone:  "Europe/Paris"
+  variables:
+    - temperature_2m
+    - relative_humidity_2m
+    - wind_speed_10m
+    - precipitation
+    - surface_pressure
+    - shortwave_radiation
+    - cloudcover
+    - et0_fao_evapotranspiration
+  hourly: true
+  
+  base_url: "https://archive-api.open-meteo.com/v1/archive"
+  timeout_seconds: 60
+  retry_attempts: 3
+
+yfinance:
+  tickers:
+    - "^FCHI"    # CAC 40
+    - "EDF.PA"   # EDF (énergie)
+    - "TTE.PA"   # TotalEnergies
+    - "^GSPC"    # S&P 500 (contexte mondial)
+  interval: "1d"   # journalier, resamplé en horaire par ffill
+
+paths:
+  raw:       "data/raw/"
+  interim:   "data/interim/"
+  processed: "data/processed/"
+  models:    "models/"
+  reports:   "reports/"
+  figures:   "reports/figures/"
+  monitoring: "reports/monitoring/"
+  notebooks: "notebooks/"
+
+feature_engineering:
+  lags:         [1, 2, 3, 6, 12, 24, 48, 72, 168]   # heures
+  rolling_windows: [6, 24, 168]                        # heures
+  diff_orders:  [1, 24, 168]
+  cyclical_features: true

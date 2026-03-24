@@ -1,0 +1,7 @@
+# --- virtualenv ---
+.env
+
+# --- data ---
+data/raw/
+data/interim/
+data/processed/
