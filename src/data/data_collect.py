@@ -103,7 +103,7 @@ def fetch_openmeteo_data(cfg: dict, retries: int = 3, delay: int = 5) -> pd.Data
     actual_hours   = len(df)
     missing_pct    = max(0, (expected_hours - actual_hours) / expected_hours * 100)
     if missing_pct > 5:
-        log.warning(f"⚠️  {missing_pct:.1f}% des heures manquantes dans OpenMeteo")
+        log.warning(f"{missing_pct:.1f}% des heures manquantes dans OpenMeteo")
 
     # Supprimer les doublons éventuels
     df = df[~df.index.duplicated(keep="first")]
