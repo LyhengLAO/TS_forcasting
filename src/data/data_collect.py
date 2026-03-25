@@ -154,7 +154,7 @@ def fetch_yfinance_data(cfg: dict) -> pd.DataFrame:
                 raw.index.name = "datetime"
                 raw.index = pd.to_datetime(raw.index)
 
-                # Resample : journalier → horaire (forward fill, max 24h)
+                # Resample : journalier -> horaire (forward fill, max 24h)
                 raw = raw.resample("h").ffill(limit=24)
 
                 frames.append(raw)

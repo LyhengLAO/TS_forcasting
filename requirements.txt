@@ -10,7 +10,6 @@ matplotlib
 seaborn
 pyarrow
 scipy
-great-expectations
 
 # --- utilities ---
 pyyaml
@@ -18,7 +17,7 @@ python-dotenv
 joblib
 tqdm
 
-# ─── Jupyter ────────────────────
+# --- Jupyter ---
 jupyter
 jupyterlab
 nbconvert
