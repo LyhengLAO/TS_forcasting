@@ -257,7 +257,7 @@ def preprocess(cfg: dict) -> pd.DataFrame:
     out_path = Path(cfg["paths"]["interim"]) / "merged_clean.parquet"
     df.to_parquet(out_path, compression="snappy")
     log.info(f"\n Données nettoyées sauvegardées : {out_path}")
-    log.info(f"   Taille : {out_path.stat().st_size / 1e6:.2f} MB")
+    log.info(f"Taille : {out_path.stat().st_size / 1e6:.2f} MB")
 
     return df
 
