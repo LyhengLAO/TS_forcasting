@@ -53,3 +53,9 @@ feature_engineering:
   rolling_windows: [6, 24, 168]                        # heures
   diff_orders:  [1, 24, 168]
   cyclical_features: true
+
+mlflow:
+  tracking_uri:    "http://localhost:5000"
+  experiment_name: "ts-forecast"
+  model_name:      "ts-forecast-xgb"
+  artifact_location: "mlruns/"
