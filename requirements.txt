@@ -23,3 +23,13 @@ jupyter
 jupyterlab
 nbconvert
 ipywidgets
+
+# --- MLflow ---
+mlflow
+
+# --- model ---
+xgboost
+scikit-learn
+torch
+prophet
+optuna

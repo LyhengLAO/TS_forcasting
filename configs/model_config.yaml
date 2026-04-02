@@ -1,0 +1,101 @@
+# ============================================================
+# Hyperparamètres de référence pour chaque modèle
+# Ces valeurs sont les points de départ avant Optuna tuning.
+# Les meilleures valeurs trouvées par Optuna sont écrites
+# automatiquement dans params.yaml (versionné DVC).
+# ============================================================
+
+models:
+
+  xgboost:
+    enabled: true
+    priority: 1   # modèle principal (meilleur sur tabular time series)
+    params:
+      n_estimators:      500
+      learning_rate:     0.05
+      max_depth:         6
+      subsample:         0.80
+      colsample_bytree:  0.80
+      min_child_weight:  3
+      gamma:             0.1
+      reg_alpha:         0.01    # L1
+      reg_lambda:        1.0     # L2
+      tree_method:       "hist"  # CPU-friendly, GPU-compatible
+      early_stopping_rounds: 50
+      random_state: 42
+    optuna_search_space:
+      n_estimators:     {type: int,   low: 100,  high: 1000}
+      learning_rate:    {type: float, low: 0.005, high: 0.3, log: true}
+      max_depth:        {type: int,   low: 3,    high: 12}
+      subsample:        {type: float, low: 0.5,  high: 1.0}
+      colsample_bytree: {type: float, low: 0.4,  high: 1.0}
+      min_child_weight: {type: int,   low: 1,    high: 20}
+      gamma:            {type: float, low: 0.0,  high: 5.0}
+      reg_alpha:        {type: float, low: 1e-8, high: 10.0, log: true}
+      reg_lambda:       {type: float, low: 1e-8, high: 10.0, log: true}
+
+  sarima:
+    enabled: true
+    priority: 2
+    params:
+      order:         [2, 1, 2]        # (p, d, q) — ARIMA
+      seasonal_order: [1, 1, 1, 24]   # (P, D, Q, s) — s=24h saisonnalité journalière
+      enforce_stationarity:  false
+      enforce_invertibility: false
+      maxiter: 200
+    # SARIMA : utiliser uniquement sur séries univariées différenciées
+
+  prophet:
+    enabled: true
+    priority: 3
+    params:
+      yearly_seasonality:  true
+      weekly_seasonality:  true
+      daily_seasonality:   true
+      seasonality_mode:    "additive"       # ou "multiplicative" si hétéroscédasticité
+      changepoint_prior_scale:    0.05      # flexibilité tendance
+      seasonality_prior_scale:    10.0
+      holidays_prior_scale:       10.0
+      interval_width:             0.95      # intervalle de confiance
+      mcmc_samples:               0         # 0 = MAP (rapide), >0 = MCMC (lent)
+    add_regressors:
+      - "meteo_wind_speed_10m"
+      - "meteo_relative_humidity_2m"
+
+  lstm:
+    enabled: true
+    priority: 4
+    architecture:
+      input_size:   null          # calculé dynamiquement selon features
+      hidden_size:  128
+      num_layers:   2
+      dropout:      0.20
+      bidirectional: false
+    training:
+      epochs:        100
+      batch_size:    64
+      learning_rate: 0.001
+      weight_decay:  1e-5
+      patience:      15           # early stopping
+      clip_grad_norm: 1.0
+      sequence_length: 48         # fenêtre temporelle en entrée (48h)
+    optimizer: "adam"
+    scheduler:
+      type: "cosine_annealing"
+      T_max: 50
+
+# ─── Sélection de modèle ──────────────────────────────────────────────────────
+selection:
+  metric:    "rmse"              # critère de sélection
+  direction: "minimize"
+  cv:
+    strategy:  "time_series_split"
+    n_splits:  5
+    gap:       24                # gap (heures) entre train et val dans chaque fold
+    test_size: 168               # taille val par fold (1 semaine)
+
+# ─── Critères de passage en production ────────────────────────────────────────
+production_thresholds:
+  max_rmse:  2.5     # °C — au-dessus, on bloque le déploiement
+  max_mape:  10.0    # % — au-dessus, on alerte
+  min_r2:    0.80    # en dessous, on refuse le modèle
