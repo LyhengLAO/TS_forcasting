@@ -39,7 +39,7 @@ def load_datasets(cfg: dict) -> dict:
         if not (processed / f).exists():
             raise FileNotFoundError(
                 f"Fichier manquant : {processed / f}\n"
-                "Lancer d'abord : make engineer"
+                "Lancer d'abord : les parties data"
             )
 
     train = pd.read_parquet(processed / "features_train.parquet")
