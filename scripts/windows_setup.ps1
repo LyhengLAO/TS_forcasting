@@ -26,11 +26,30 @@ $ProgressPreference    = "SilentlyContinue"
 
 # ─── Couleurs et helpers ──────────────────────────────────────
 
-function Write-Step   { param($msg) Write-Host "`n▶ $msg" -ForegroundColor Cyan }
-function Write-OK     { param($msg) Write-Host "  ✅ $msg" -ForegroundColor Green }
-function Write-Warn   { param($msg) Write-Host "  ⚠️  $msg" -ForegroundColor Yellow }
-function Write-Err    { param($msg) Write-Host "  ❌ $msg" -ForegroundColor Red }
-function Write-Info   { param($msg) Write-Host "  ℹ️  $msg" -ForegroundColor Gray }
+function Write-Step {
+    param($msg)
+    Write-Host "`n[STEP] $msg" -ForegroundColor Cyan
+}
+
+function Write-OK {
+    param($msg)
+    Write-Host "  [OK] $msg" -ForegroundColor Green
+}
+
+function Write-Warn {
+    param($msg)
+    Write-Host "  [WARN] $msg" -ForegroundColor Yellow
+}
+
+function Write-Err {
+    param($msg)
+    Write-Host "  [ERR] $msg" -ForegroundColor Red
+}
+
+function Write-Info {
+    param($msg)
+    Write-Host "  [INFO] $msg" -ForegroundColor Gray
+}
 
 function Test-Command {
     param($Name)
