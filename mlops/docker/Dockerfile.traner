@@ -1,0 +1,53 @@
+# ============================================================
+# Dockerfile.trainer — Image pour l'entraînement des modèles
+#
+# Build : docker build -f mlops/docker/Dockerfile.trainer -t ts-forecast-trainer:latest .
+# Run   : docker run --rm \
+#           -v $(pwd)/data:/app/data \
+#           -v $(pwd)/models:/app/models \
+#           -e MLFLOW_TRACKING_URI=http://mlflow:5000 \
+#           ts-forecast-trainer:latest
+# ============================================================
+
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ─── Runtime ──────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+LABEL description="ts-forecast Trainer — Entraînement modèles ML"
+
+# Git nécessaire pour DVC
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+
+# Répertoires de travail (montés en volumes en production)
+RUN mkdir -p /app/data/raw /app/data/interim /app/data/processed \
+             /app/models /app/reports /app/logs
+
+COPY src/      ./src/
+COPY pipelines/ ./pipelines/
+COPY configs/  ./configs/
+COPY params.yaml .
+COPY dvc.yaml .
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+# Par défaut : lance le pipeline d'entraînement complet
+CMD ["python", "-m", "pipelines.training_pipeline"]

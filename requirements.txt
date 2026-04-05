@@ -1,3 +1,9 @@
+# ============================================================
+# requirements.txt — ts-forecast-project
+# Toutes les dépendances versionnées pour reproductibilité
+# Installer : pip install -r requirements.txt
+# ============================================================
+
 # --- data collection ---
 yfinance
 openmeteo-requests
@@ -33,3 +39,20 @@ scikit-learn
 torch
 prophet
 optuna
+
+# --- monitoring & drift detection ---
+evidently
+prometheus-client
+
+# --- versioning & deployment ---
+dvc
+dvc-gdrive
+fastapi
+uvicorn[standard]
+pydantic
+flask
+
+# --- testing ---
+pytest
+pytest-cov
+pytest-asyncio

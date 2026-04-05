@@ -1,0 +1,110 @@
+# ============================================================
+# Configuration monitoring, alertes et data drift
+# ============================================================
+
+monitoring:
+
+  # ─── Data drift ─────────────────────────────────────────
+  drift:
+    enabled: true
+    # Fréquence de vérification (heures)
+    check_interval_hours: 24
+    # Seuils d'alerte
+    thresholds:
+      share_drifted_features: 0.20    # > 20% features en drift → ALERTE
+      psi_threshold:          0.25    # PSI > 0.25 → drift significatif
+      ks_pvalue_threshold:    0.05    # KS p-value < 0.05 → drift détecté
+    # Tests utilisés par Evidently
+    tests:
+      - "ColumnDriftMetric"
+      - "DatasetDriftMetric"
+      - "DatasetMissingValuesMetric"
+      - "ColumnCorrelationsMetric"
+    # Features prioritaires à surveiller (target en premier)
+    priority_features:
+      - "meteo_temperature_2m"
+      - "meteo_relative_humidity_2m"
+      - "meteo_wind_speed_10m"
+      - "meteo_precipitation"
+    # Fenêtre de référence (jours de données training)
+    reference_window_days: 30
+    # Fenêtre courante (production, jours)
+    current_window_days:   7
+    output_dir: "reports/monitoring/"
+
+  # ─── Performance du modèle en production ──────────────────
+  performance:
+    enabled: true
+    check_interval_hours: 6
+    # Dégradation acceptée par rapport aux métriques de validation initiales
+    degradation_thresholds:
+      rmse_relative_increase: 0.30    # +30% RMSE → alerte
+      mape_absolute_increase:  5.0    # +5pp MAPE → alerte
+    # Fenêtre de calcul des métriques live (heures)
+    rolling_window_hours: 72
+    # Nombre minimum de prédictions pour déclencher le check
+    min_predictions: 50
+
+  # ─── Alertes ─────────────────────────────────────────────
+  alerts:
+    # Email (sans SMTP externe : log local en dev, configurable en prod)
+    email:
+      enabled: false
+      recipients: ["mlops@company.com"]
+      smtp_host: "smtp.company.com"
+      smtp_port: 587
+    # Slack webhook (optionnel, sans clé si webhook URL publique)
+    slack:
+      enabled: false
+      webhook_url: ""
+    # Log local (toujours actif)
+    log:
+      enabled: true
+      level: "WARNING"
+      file:  "logs/monitoring_alerts.log"
+    # Actions automatiques
+    auto_actions:
+      retrain_on_drift:        false   # true = re-entraîne automatiquement
+      rollback_on_degradation: true    # true = rollback au modèle précédent
+
+  # ─── Prometheus / Grafana ─────────────────────────────────
+  prometheus:
+    enabled: true
+    port:    9090
+    metrics:
+      - name: "predict_requests_total"
+        type: "counter"
+        help: "Nombre total de requêtes /predict"
+      - name: "predict_latency_seconds"
+        type: "histogram"
+        help: "Latence des prédictions (secondes)"
+        buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
+      - name: "model_rmse_live"
+        type: "gauge"
+        help: "RMSE calculé sur les 72 dernières heures"
+      - name: "drift_share_features"
+        type: "gauge"
+        help: "Part des features en drift (0-1)"
+      - name: "drift_alerts_total"
+        type: "counter"
+        help: "Nombre d'alertes drift déclenchées"
+
+  # ─── MLflow model registry ────────────────────────────────
+  registry:
+    auto_transition:
+      staging_to_production:
+        condition: "rmse < 2.5 AND mape < 10.0"
+        enabled: false   # true = promotion automatique
+      production_to_archived:
+        condition: "drift_alert OR performance_degradation"
+        enabled: true
+
+  # ─── Retraining ───────────────────────────────────────────
+  retraining:
+    schedule_cron: "0 3 * * 1"    # tous les lundis à 3h du matin
+    trigger_conditions:
+      - "drift_alert"
+      - "performance_degradation"
+      - "new_data_available_days >= 30"
+    min_new_samples:  5000         # minimum de nouvelles observations
+    retrain_from_scratch: false    # false = warm start (continue entraînement)

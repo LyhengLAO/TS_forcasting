@@ -1,0 +1,199 @@
+# ============================================================
+# mlops/kubernetes/mlflow.yaml
+# Déploiement MLflow Tracking Server + Model Registry sur K8s
+#
+# Stack :
+#   - Deployment : MLflow server (1 replica)
+#   - Service    : exposé en ClusterIP (accès interne)
+#   - PVC        : stockage persistant des artifacts
+#
+# Usage :
+#   kubectl apply -f mlops/kubernetes/namespace.yaml
+#   kubectl apply -f mlops/kubernetes/mlflow.yaml
+# ============================================================
+
+# ─── Deployment MLflow ────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-server
+  namespace: ts-forecast
+  labels:
+    app: mlflow
+    component: tracking-server
+spec:
+  replicas: 1     # MLflow n'est pas HA — 1 seule instance
+  selector:
+    matchLabels:
+      app: mlflow
+  strategy:
+    type: Recreate   # évite les conflits SQLite pendant la mise à jour
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+        - name: mlflow
+          image: python:3.11-slim
+          command:
+            - bash
+            - -c
+            - |
+              pip install mlflow psycopg2-binary --quiet &&
+              mlflow server \
+                --backend-store-uri postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB) \
+                --default-artifact-root /mlartifacts \
+                --host 0.0.0.0 \
+                --port 5000 \
+                --serve-artifacts
+          ports:
+            - containerPort: 5000
+              name: http
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+            - name: POSTGRES_DB
+              value: mlflow_db
+          resources:
+            requests:
+              cpu:    "200m"
+              memory: "512Mi"
+            limits:
+              cpu:    "1000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: mlartifacts
+              mountPath: /mlartifacts
+          livenessProbe:
+            httpGet:
+              path:   /health
+              port:   5000
+            initialDelaySeconds: 60
+            periodSeconds:       30
+            failureThreshold:    5
+          readinessProbe:
+            httpGet:
+              path:   /health
+              port:   5000
+            initialDelaySeconds: 30
+            periodSeconds:       10
+      volumes:
+        - name: mlartifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+
+---
+# ─── Service MLflow ───────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-service
+  namespace: ts-forecast
+  labels:
+    app: mlflow
+spec:
+  selector:
+    app: mlflow
+  ports:
+    - name: http
+      port:       5000
+      targetPort: 5000
+      protocol:   TCP
+  type: ClusterIP
+
+---
+# ─── Secret PostgreSQL ────────────────────────────────────────
+# Remplacer les valeurs par de vraies credentials encodées en base64
+# echo -n "mlflow_user" | base64
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: ts-forecast
+type: Opaque
+data:
+  username: bWxmbG93X3VzZXI=   # mlflow_user (base64)
+  password: bWxmbG93X3Bhc3M=   # mlflow_pass (base64) — CHANGER EN PROD
+
+---
+# ─── Deployment PostgreSQL ────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: ts-forecast
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: mlflow_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu:    "100m"
+              memory: "256Mi"
+            limits:
+              cpu:    "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "mlflow_user", "-d", "mlflow_db"]
+            initialDelaySeconds: 30
+            periodSeconds:       10
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data-pvc
+
+---
+# ─── Service PostgreSQL ───────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: ts-forecast
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port:       5432
+      targetPort: 5432
+  type: ClusterIP

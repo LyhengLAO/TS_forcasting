@@ -1,0 +1,110 @@
+# ============================================================
+# namespace.yaml — Namespace + PersistentVolumeClaims K8s
+#
+# Ordre d'application :
+#   kubectl apply -f mlops/kubernetes/namespace.yaml   (en premier)
+#   kubectl apply -f mlops/kubernetes/mlflow.yaml
+#   kubectl apply -f mlops/kubernetes/deployment.yaml
+# ============================================================
+
+# ─── Namespace dédié ─────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ts-forecast
+  labels:
+    project:     ts-forecast
+    environment: production
+    managed-by:  kubectl
+
+---
+# ─── PVC : Artifacts MLflow ───────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts-pvc
+  namespace: ts-forecast
+  labels:
+    app: mlflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi   # augmenter selon volume d'artifacts
+  storageClassName: standard   # remplacer par "gp2" sur AWS, "pd-standard" sur GCP
+
+---
+# ─── PVC : Données PostgreSQL (MLflow backend) ────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-pvc
+  namespace: ts-forecast
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# ─── PVC : Données d'entraînement ────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: training-data-pvc
+  namespace: ts-forecast
+  labels:
+    app: trainer
+spec:
+  accessModes:
+    - ReadWriteMany   # plusieurs pods peuvent lire simultanément
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard
+
+---
+# ─── ResourceQuota : Limites de ressources du namespace ───────
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ts-forecast-quota
+  namespace: ts-forecast
+spec:
+  hard:
+    requests.cpu:    "4"
+    requests.memory: "8Gi"
+    limits.cpu:      "16"
+    limits.memory:   "32Gi"
+    pods:            "20"
+
+---
+# ─── NetworkPolicy : Isoler le namespace ──────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ts-forecast-network-policy
+  namespace: ts-forecast
+spec:
+  podSelector: {}   # s'applique à tous les pods du namespace
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        # Autoriser le trafic interne au namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ts-forecast
+        # Autoriser depuis le namespace monitoring (Prometheus)
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+  egress:
+    # Autoriser tout le trafic sortant (APIs externes, DNS)
+    - {}

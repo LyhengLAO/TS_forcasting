@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ts-forecast-config
+  namespace: default
+  labels:
+    app: ts-forecast
+    component: config
+data:
+  # URI du serveur MLflow (adapter selon votre infrastructure)
+  mlflow_uri: "http://mlflow-service:5000"
+  # Niveau de log
+  log_level: "INFO"
+  # Environnement
+  environment: "production"
+  # Horizon de prédiction (heures)
+  horizon_hours: "24"

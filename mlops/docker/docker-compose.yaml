@@ -1,0 +1,174 @@
+# ============================================================
+# docker-compose.yml — Stack locale de développement et test
+#
+# Services :
+#   - mlflow      : Tracking server + Model Registry
+#   - postgres    : Backend MLflow (remplace SQLite)
+#   - api         : API FastAPI de prédiction
+#   - trainer     : Conteneur d'entraînement (one-shot)
+#   - prometheus  : Collecte métriques
+#   - grafana     : Dashboard de monitoring
+#
+# Usage :
+#   docker-compose up -d                    # démarrer tout
+#   docker-compose up mlflow postgres       # démarrer uniquement MLflow
+#   docker-compose run --rm trainer         # lancer un entraînement
+#   docker-compose logs -f api              # logs API en temps réel
+#   docker-compose down -v                  # tout arrêter + supprimer volumes
+# ============================================================
+
+version: "3.9"
+
+# ─── Réseau partagé ───────────────────────────────────────────
+networks:
+  ts-forecast-net:
+    driver: bridge
+
+# ─── Volumes persistants ──────────────────────────────────────
+volumes:
+  postgres_data:
+  mlflow_artifacts:
+  grafana_data:
+  prometheus_data:
+
+services:
+
+  # ─── PostgreSQL (backend MLflow) ────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ts-forecast-postgres
+    environment:
+      POSTGRES_DB:       mlflow_db
+      POSTGRES_USER:     mlflow_user
+      POSTGRES_PASSWORD: mlflow_pass_dev  # changer en prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ts-forecast-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow_user -d mlflow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── MLflow Tracking Server ─────────────────────────────────
+  mlflow:
+    image: python:3.11-slim
+    container_name: ts-forecast-mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -c "pip install mlflow psycopg2-binary boto3 --quiet &&
+               mlflow server
+               --backend-store-uri postgresql://mlflow_user:mlflow_pass_dev@postgres:5432/mlflow_db
+               --default-artifact-root /mlartifacts
+               --host 0.0.0.0
+               --port 5000"
+    volumes:
+      - mlflow_artifacts:/mlartifacts
+    ports:
+      - "5000:5000"
+    networks:
+      - ts-forecast-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ─── API FastAPI ─────────────────────────────────────────────
+  api:
+    build:
+      context: ../..
+      dockerfile: mlops/docker/Dockerfile.api
+    image: ts-forecast-api:local
+    container_name: ts-forecast-api
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PYTHONPATH: /app
+      LOG_LEVEL: INFO
+    volumes:
+      - ../../data:/app/data:ro              # données en lecture seule
+      - ../../reports:/app/reports           # rapports en écriture
+      - ../../logs:/app/logs
+    ports:
+      - "8000:8000"
+    networks:
+      - ts-forecast-net
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  # ─── Trainer (job one-shot) ──────────────────────────────────
+  trainer:
+    build:
+      context: ../..
+      dockerfile: mlops/docker/Dockerfile.trainer
+    image: ts-forecast-trainer:local
+    container_name: ts-forecast-trainer
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PYTHONPATH: /app
+    volumes:
+      - ../../data:/app/data
+      - ../../models:/app/models
+      - ../../reports:/app/reports
+      - ../../logs:/app/logs
+    networks:
+      - ts-forecast-net
+    # Ne redémarre pas automatiquement (job one-shot)
+    restart: "no"
+    profiles:
+      - training    # docker-compose --profile training up trainer
+
+  # ─── Prometheus ──────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: ts-forecast-prometheus
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    networks:
+      - ts-forecast-net
+    restart: unless-stopped
+
+  # ─── Grafana ─────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: ts-forecast-grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin_dev    # changer en prod
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "http://localhost:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - ts-forecast-net
+    restart: unless-stopped

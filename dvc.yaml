@@ -1,0 +1,157 @@
+# ============================================================
+# dvc.yaml — Pipeline de données versionné avec DVC
+#
+# Usage :
+#   dvc repro              # rejoue toutes les étapes modifiées
+#   dvc repro collect      # rejoue uniquement l'étape collect
+#   dvc dag                # affiche le graphe des dépendances
+#   dvc params diff        # compare les paramètres vs le run précédent
+#   dvc metrics show       # affiche les métriques du dernier run
+#
+# Chaque étape est tracée : si les inputs ou params n'ont pas changé,
+# DVC saute l'étape (cache intelligent).
+# ============================================================
+
+stages:
+
+  # ─── Étape 1 : Collecte des données brutes ──────────────
+  collect:
+    cmd: python -m src.data.collect
+    deps:
+      - src/data/collect.py
+      - configs/config.yaml
+    params:
+      - configs/config.yaml:
+          - data.start_date
+          - data.end_date
+          - openmeteo.latitude
+          - openmeteo.longitude
+          - openmeteo.variables
+          - yfinance.tickers
+    outs:
+      - data/raw/weather_raw.parquet:
+          cache: true
+          push: true
+      - data/raw/finance_raw.parquet:
+          cache: true
+          push: true
+
+  # ─── Étape 2 : Validation des données ───────────────────
+  validate:
+    cmd: python -m src.data.validate
+    deps:
+      - src/data/validate.py
+      - data/raw/weather_raw.parquet
+      - data/raw/finance_raw.parquet
+    outs:
+      - reports/validation_report.json:
+          cache: false    # on veut toujours voir le dernier rapport
+
+  # ─── Étape 3 : Preprocessing ────────────────────────────
+  preprocess:
+    cmd: python -m src.data.preprocess
+    deps:
+      - src/data/preprocess.py
+      - data/raw/weather_raw.parquet
+      - data/raw/finance_raw.parquet
+      - configs/config.yaml
+    params:
+      - configs/config.yaml:
+          - feature_engineering.lags
+    outs:
+      - data/interim/merged_clean.parquet:
+          cache: true
+      - data/interim/outliers_flagged.parquet:
+          cache: true
+
+  # ─── Étape 4 : Feature engineering ──────────────────────
+  featurize:
+    cmd: python -m src.features.build_features
+    deps:
+      - src/features/build_features.py
+      - data/interim/merged_clean.parquet
+      - configs/config.yaml
+    params:
+      - params.yaml:
+          - prepare.train_ratio
+          - prepare.val_ratio
+          - prepare.horizon_hours
+          - featurize.lags
+          - featurize.rolling_windows
+          - featurize.diff_orders
+          - featurize.cyclical
+    outs:
+      - data/processed/features_train.parquet:
+          cache: true
+      - data/processed/features_val.parquet:
+          cache: true
+      - data/processed/features_test.parquet:
+          cache: true
+
+  # ─── Étape 5 : Tests statistiques ───────────────────────
+  statistical_tests:
+    cmd: python -m src.analysis.statistical_tests
+    deps:
+      - src/analysis/statistical_tests.py
+      - data/processed/features_train.parquet
+    outs:
+      - reports/statistical_tests.json:
+          cache: false
+      - reports/figures/stl_decomposition.png:
+          cache: true
+      - reports/figures/acf_pacf.png:
+          cache: true
+
+  # ─── Étape 6 : Entraînement ─────────────────────────────
+  train:
+    cmd: python -m src.models.train
+    deps:
+      - src/models/train.py
+      - data/processed/features_train.parquet
+      - data/processed/features_val.parquet
+      - configs/model_config.yaml
+    params:
+      - params.yaml:
+          - train.model
+          - train.xgboost
+          - train.sarima
+          - train.lstm
+          - prepare.seed
+    outs:
+      - models/best_model/:
+          cache: true
+    metrics:
+      - reports/metrics_train.json:
+          cache: false
+
+  # ─── Étape 7 : Évaluation ───────────────────────────────
+  evaluate:
+    cmd: python -m src.models.evaluate
+    deps:
+      - src/models/evaluate.py
+      - models/best_model/
+      - data/processed/features_test.parquet
+    params:
+      - params.yaml:
+          - evaluate.metrics
+          - evaluate.n_cv_splits
+    metrics:
+      - reports/metrics_test.json:
+          cache: false
+    plots:
+      - reports/figures/predictions_vs_actual.png:
+          cache: true
+      - reports/figures/residuals.png:
+          cache: true
+      - reports/figures/feature_importance.png:
+          cache: true
+
+artifacts:
+  ts_forecast_model:
+    type: model
+    path: models/best_model/
+    desc: "Modèle de prévision météo (XGBoost / SARIMA / Prophet / LSTM)"
+    labels:
+      - time-series
+      - forecasting
+      - weather

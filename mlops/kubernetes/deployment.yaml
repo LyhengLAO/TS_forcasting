@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ts-forecast-api
+  namespace: default
+  labels:
+    app: ts-forecast
+    component: api
+    version: "1.0.0"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ts-forecast
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:       1     # 1 pod supplémentaire pendant la mise à jour
+      maxUnavailable: 0     # aucun pod indisponible (zero-downtime)
+  template:
+    metadata:
+      labels:
+        app: ts-forecast
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "8000"
+        prometheus.io/path:   "/metrics"
+    spec:
+      # Tolérance aux pannes de nœud
+      topologySpreadConstraints:
+        - maxSkew:           1
+          topologyKey:       kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ts-forecast
+
+      containers:
+        - name: api
+          image: ts-forecast-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+
+          # Variables d'environnement depuis ConfigMap
+          env:
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: ts-forecast-config
+                  key: mlflow_uri
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: ts-forecast-config
+                  key: log_level
+            - name: PYTHONPATH
+              value: "/app"
+
+          # Limites ressources
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "512Mi"
+            limits:
+              cpu:    "1000m"
+              memory: "2Gi"
+
+          # Probe de vivacité — redémarre si l'app est bloquée
+          livenessProbe:
+            httpGet:
+              path:   /health
+              port:   8000
+            initialDelaySeconds: 30
+            periodSeconds:       15
+            failureThreshold:    3
+            timeoutSeconds:       5
+
+          # Probe de disponibilité — retire du LB si pas prêt
+          readinessProbe:
+            httpGet:
+              path:   /health
+              port:   8000
+            initialDelaySeconds: 10
+            periodSeconds:        5
+            failureThreshold:     3
+            successThreshold:     1
+            timeoutSeconds:        3
+
+          # Probe de démarrage — donne plus de temps au démarrage initial
+          startupProbe:
+            httpGet:
+              path:   /health
+              port:   8000
+            initialDelaySeconds: 15
+            periodSeconds:       10
+            failureThreshold:    12    # 12 * 10s = 2 minutes max
+
+          # Stockage logs
+          volumeMounts:
+            - name: logs-volume
+              mountPath: /app/logs
+
+      volumes:
+        - name: logs-volume
+          emptyDir: {}
+
+      # Redémarrage en cas d'échec
+      restartPolicy: Always
+
+      # Termination gracieuse
+      terminationGracePeriodSeconds: 30
+
+---
+# ─── Horizontal Pod Autoscaler ────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ts-forecast-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ts-forecast-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    # Scale sur CPU
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               AverageUtilization
+          averageUtilization: 70
+    # Scale sur mémoire
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type:               AverageUtilization
+          averageUtilization: 80
+  # Politique de scale-down conservatrice (évite le yo-yo)
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # attendre 5 min avant scale-down
+      policies:
+        - type:          Percent
+          value:         25
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0     # scale-up immédiat
+      policies:
+        - type:          Percent
+          value:         100
+          periodSeconds: 15
+        - type:          Pods
+          value:         2
+          periodSeconds: 15
+      selectPolicy: Max

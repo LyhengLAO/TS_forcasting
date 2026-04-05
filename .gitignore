@@ -1,10 +1,43 @@
+# ============================================================
+# .gitignore — ts-forecast-project
+# Les données brutes et modèles sont versionnés via DVC (pas Git)
+# ============================================================
+
 # --- virtualenv ---
 .env
+
+# ─── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # --- data ---
 data/raw/
 data/interim/
 data/processed/
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
 
 # --- Logs ---
 logs/
@@ -17,3 +50,50 @@ logs/
 # --- DVC ---
 .dvc/cache/
 .dvc/tmp/
+
+# --- Pytest ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# ─── IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Docker ---
+.dockerignore
+
+# --- Rapports (lourds) ---
+reports/monitoring/*.html
+reports/figures/*.png
+# Garder les JSON de métriques (légers, utiles pour DVC)
+!reports/metrics_*.json
+!reports/statistical_tests.json
+!reports/validation_report.json
+
+# --- Secrets (JAMAIS commités) ---
+.env.local
+.env.production
+secrets/
+*.pem
+*.key
+*.crt
