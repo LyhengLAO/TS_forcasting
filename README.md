@@ -126,7 +126,6 @@ Sélection automatique via **Optuna** (50 trials, TPE sampler).
 | Orchestration | **Prefect** |
 | Hyperparameter tuning | **Optuna** |
 | Data drift | **Evidently** |
-| Validation données | **Great Expectations** |
 | API de serving | **FastAPI** |
 | Conteneurisation | **Docker** |
 | Orchestration K8s | **Kubernetes + minikube** |
