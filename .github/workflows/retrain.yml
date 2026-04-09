@@ -1,0 +1,419 @@
+# ============================================================
+# retrain.yml — Pipeline de Re-entraînement Automatique
+#
+# Déclenchements :
+#   - Chaque lundi à 3h UTC (cron)
+#   - Manuellement via workflow_dispatch (avec paramètres)
+#   - Automatiquement si le rapport de drift signale RETRAIN
+#
+# Étapes :
+#   1. Collecter les nouvelles données (OpenMeteo + yfinance)
+#   2. Valider les données
+#   3. Rejouer le pipeline DVC (preprocessing → features)
+#   4. Entraîner un nouveau modèle (Optuna, n_trials réduit)
+#   5. Évaluer et comparer avec le modèle en production
+#   6. Promouvoir si meilleur (gate de production)
+#   7. Déployer si en production
+# ============================================================
+
+name: Scheduled Retraining
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"    # Lundi 3h UTC
+
+  workflow_dispatch:
+    inputs:
+      force_retrain:
+        description: "Forcer le re-entraînement même sans drift"
+        required: false
+        type: boolean
+        default: false
+      n_optuna_trials:
+        description: "Nombre de trials Optuna"
+        required: false
+        type: number
+        default: 30
+      model:
+        description: "Modèle à entraîner (xgboost / sarima / prophet / lstm)"
+        required: false
+        type: choice
+        options: [xgboost, sarima, prophet, lstm]
+        default: xgboost
+
+  # Déclenchement depuis un autre workflow (ex: drift alert)
+  workflow_call:
+    inputs:
+      drift_detected:
+        description: "Drift détecté par le monitoring"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────
+  # Job 1 : Vérifier si le re-entraînement est nécessaire
+  # ─────────────────────────────────────────────────────────
+  check-retrain-needed:
+    name: "Check Retrain Needed"
+    runs-on: ubuntu-latest
+    outputs:
+      should_retrain: ${{ steps.decision.outputs.should_retrain }}
+      reason:         ${{ steps.decision.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install minimal deps
+        run: pip install pyyaml numpy pandas pyarrow
+
+      - name: Evaluate retrain decision
+        id: decision
+        run: |
+          python - <<'EOF'
+          import os
+          import json
+          from pathlib import Path
+
+          force       = "${{ github.event.inputs.force_retrain }}" == "true"
+          drift_input = "${{ inputs.drift_detected }}" == "true"
+          scheduled   = "${{ github.event_name }}" == "schedule"
+
+          # Vérifier le dernier rapport de drift
+          drift_files = sorted(Path("reports/monitoring").glob("drift_summary_*.json"))
+          last_drift  = None
+          if drift_files:
+              with open(drift_files[-1]) as f:
+                  last_drift = json.load(f)
+
+          drift_alert = (
+              last_drift is not None
+              and last_drift.get("action_required") == "RETRAIN"
+          )
+
+          should = force or drift_input or drift_alert or scheduled
+          reason = (
+              "forced" if force else
+              "drift_detected" if (drift_input or drift_alert) else
+              "scheduled" if scheduled else
+              "no_reason"
+          )
+
+          print(f"should_retrain={str(should).lower()} | reason={reason}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"should_retrain={str(should).lower()}\n")
+              f.write(f"reason={reason}\n")
+          EOF
+
+      - name: Log decision
+        run: |
+          echo "📊 Décision : ${{ steps.decision.outputs.should_retrain }}"
+          echo "📋 Raison   : ${{ steps.decision.outputs.reason }}"
+
+  # ─────────────────────────────────────────────────────────
+  # Job 2 : Collecte des nouvelles données
+  # ─────────────────────────────────────────────────────────
+  collect-data:
+    name: "Collect Fresh Data"
+    runs-on: ubuntu-latest
+    needs: check-retrain-needed
+    if: needs.check-retrain-needed.outputs.should_retrain == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create data directories
+        run: mkdir -p data/raw data/interim data/processed models reports/figures reports/monitoring logs
+
+      - name: Pull existing data from DVC remote
+        run: |
+          pip install dvc
+          # Pull données précédentes si disponibles
+          dvc pull data/raw/ || echo "⚠️  DVC pull ignoré (premier run ou remote absent)"
+        continue-on-error: true
+
+      - name: Collect new data (OpenMeteo + yfinance)
+        run: |
+          echo "🌤️  Collecte des données fraîches..."
+          python -m src.data.collect --config configs/config.yaml
+          ls -lh data/raw/
+
+      - name: Validate collected data
+        run: python -m src.data.validate
+
+      - name: Cache collected data
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw/
+          key: raw-data-${{ github.run_id }}
+
+  # ─────────────────────────────────────────────────────────
+  # Job 3 : Feature Engineering
+  # ─────────────────────────────────────────────────────────
+  feature-engineering:
+    name: "Feature Engineering"
+    runs-on: ubuntu-latest
+    needs: collect-data
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore raw data
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw/
+          key: raw-data-${{ github.run_id }}
+
+      - name: Create directories
+        run: mkdir -p data/interim data/processed reports/figures logs
+
+      - name: Preprocessing
+        run: python -m src.data.preprocess
+
+      - name: Feature Engineering
+        run: python -m src.features.build_features
+
+      - name: Statistical tests
+        run: python -m src.analysis.statistical_tests || true
+        continue-on-error: true
+
+      - name: Cache processed features
+        uses: actions/cache/save@v4
+        with:
+          path: data/processed/
+          key: processed-data-${{ github.run_id }}
+
+  # ─────────────────────────────────────────────────────────
+  # Job 4 : Entraînement
+  # ─────────────────────────────────────────────────────────
+  train:
+    name: "Model Training"
+    runs-on: ubuntu-latest
+    needs: feature-engineering
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore processed features
+        uses: actions/cache/restore@v4
+        with:
+          path: data/processed/
+          key: processed-data-${{ github.run_id }}
+
+      - name: Create directories
+        run: mkdir -p models reports logs
+
+      - name: Train model (Optuna + MLflow)
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'sqlite:///mlruns/mlflow.db' }}
+        run: |
+          N_TRIALS="${{ github.event.inputs.n_optuna_trials || '30' }}"
+          echo "🏋️  Entraînement — $N_TRIALS trials Optuna..."
+          python -m src.models.train \
+            --config configs/config.yaml \
+            --model-config configs/model_config.yaml \
+            --trials $N_TRIALS
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model-${{ github.run_id }}
+          path: |
+            models/best_model/
+            reports/metrics_train.json
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────
+  # Job 5 : Évaluation et comparaison
+  # ─────────────────────────────────────────────────────────
+  evaluate:
+    name: "Evaluate & Compare"
+    runs-on: ubuntu-latest
+    needs: train
+    outputs:
+      gate_passed: ${{ steps.gate.outputs.gate_passed }}
+      new_rmse:    ${{ steps.gate.outputs.new_rmse }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore data + model
+        uses: actions/cache/restore@v4
+        with:
+          path: data/processed/
+          key: processed-data-${{ github.run_id }}
+
+      - name: Download model artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model-${{ github.run_id }}
+
+      - name: Evaluate model
+        id: gate
+        run: |
+          python - <<'EOF'
+          import json
+          import os
+          import numpy as np
+          import pandas as pd
+          import joblib
+          import yaml
+          from pathlib import Path
+
+          with open("configs/config.yaml") as f:
+              cfg = yaml.safe_load(f)
+          with open("configs/model_config.yaml") as f:
+              model_cfg = yaml.safe_load(f)
+
+          TARGET  = cfg["project"]["target"]
+          HORIZON = cfg["project"]["horizon_hours"]
+          TARGET_COL = f"target_{HORIZON}h"
+
+          test  = pd.read_parquet(Path(cfg["paths"]["processed"]) / "features_test.parquet")
+          feat_cols = [c for c in test.columns if c != TARGET_COL and c != TARGET]
+
+          model = joblib.load("models/best_model/model.pkl")
+          preds = model.predict(test[feat_cols])
+          y_true = test[TARGET_COL].values
+
+          rmse = float(np.sqrt(np.mean((y_true - preds) ** 2)))
+          mae  = float(np.mean(np.abs(y_true - preds)))
+          mape = float(np.mean(np.abs((y_true - preds) / (np.abs(y_true) + 1e-8))) * 100)
+          r2   = float(1 - np.sum((y_true - preds)**2) / np.sum((y_true - y_true.mean())**2))
+
+          thresholds = model_cfg["production_thresholds"]
+          gate_passed = (
+              rmse <= thresholds["max_rmse"]
+              and mape <= thresholds["max_mape"]
+              and r2   >= thresholds["min_r2"]
+          )
+
+          print(f"📊 RMSE={rmse:.4f} | MAE={mae:.4f} | MAPE={mape:.2f}% | R²={r2:.4f}")
+          print(f"🔒 Gate {'PASSÉ ✅' if gate_passed else 'ÉCHOUÉ ❌'}")
+
+          metrics = {"rmse": rmse, "mae": mae, "mape": mape, "r2": r2, "gate_passed": gate_passed}
+          with open("reports/metrics_test.json", "w") as f:
+              json.dump(metrics, f, indent=2)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"gate_passed={str(gate_passed).lower()}\n")
+              f.write(f"new_rmse={rmse:.4f}\n")
+          EOF
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: reports/metrics_test.json
+
+      - name: Add job summary
+        run: |
+          echo "## Évaluation Modèle" >> $GITHUB_STEP_SUMMARY
+          echo "| Métrique | Valeur | Seuil |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          python -c "
+          import json
+          with open('reports/metrics_test.json') as f:
+              m = json.load(f)
+          print(f\"| RMSE | {m['rmse']:.4f} | ≤ 2.5 |\")
+          print(f\"| MAPE | {m['mape']:.2f}% | ≤ 10% |\")
+          print(f\"| R² | {m['r2']:.4f} | ≥ 0.80 |\")
+          print(f\"| Gate | {'✅ PASSÉ' if m['gate_passed'] else '❌ ÉCHOUÉ'} | — |\")
+          " >> $GITHUB_STEP_SUMMARY
+
+  # ─────────────────────────────────────────────────────────
+  # Job 6 : Déploiement si gate passé
+  # ─────────────────────────────────────────────────────────
+  deploy-new-model:
+    name: "Deploy New Model"
+    runs-on: ubuntu-latest
+    needs: evaluate
+    if: needs.evaluate.outputs.gate_passed == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model-${{ github.run_id }}
+
+      - name: Build new Docker image
+        run: |
+          docker build -f mlops/docker/Dockerfile.api \
+            -t ${{ secrets.DOCKER_USERNAME }}/ts-forecast-api:retrain-${{ github.run_id }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/ts-forecast-api:latest .
+
+      - name: Push image
+        if: secrets.DOCKER_USERNAME != ''
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          docker push ${{ secrets.DOCKER_USERNAME }}/ts-forecast-api:latest
+
+      - name: Notify success
+        run: |
+          echo "🎉 Nouveau modèle déployé !"
+          echo "   RMSE : ${{ needs.evaluate.outputs.new_rmse }}"
+          echo "   Raison retrain : ${{ needs.check-retrain-needed.outputs.reason }}"
+
+  # ─────────────────────────────────────────────────────────
+  # Job 7 : Notification si gate échoué
+  # ─────────────────────────────────────────────────────────
+  notify-gate-failure:
+    name: "Notify Gate Failure"
+    runs-on: ubuntu-latest
+    needs: evaluate
+    if: needs.evaluate.outputs.gate_passed == 'false'
+    steps:
+      - name: Log failure
+        run: |
+          echo "❌ Gate de production NON passé"
+          echo "   RMSE : ${{ needs.evaluate.outputs.new_rmse }}"
+          echo "   Le modèle actuel reste en production"
+          echo "   → Vérifier les données ou ajuster les seuils dans model_config.yaml"

@@ -1,0 +1,280 @@
+# ============================================================
+# cd.yml — Pipeline de Déploiement Continu (CD)
+#
+# Déclenché sur : push vers main après CI réussi
+# Étapes :
+#   1. Build & push Docker images vers registry
+#   2. Déploiement Kubernetes (kubectl apply)
+#   3. Smoke tests post-déploiement
+#   4. Rollback automatique si smoke tests échouent
+#
+# Secrets GitHub requis (Settings → Secrets and variables → Actions) :
+#   DOCKER_USERNAME    : username Docker Hub (ou registry privé)
+#   DOCKER_PASSWORD    : token Docker Hub
+#   KUBECONFIG_DATA    : base64 du fichier kubeconfig (kubectl config view --raw | base64)
+#   MLFLOW_TRACKING_URI: URI du serveur MLflow
+# ============================================================
+
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*.*.*"    # ex: v1.2.3 déclenche un déploiement tagué
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
+
+env:
+  REGISTRY:       docker.io
+  API_IMAGE:      ${{ secrets.DOCKER_USERNAME }}/ts-forecast-api
+  TRAINER_IMAGE:  ${{ secrets.DOCKER_USERNAME }}/ts-forecast-trainer
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────
+  # Job 1 : Vérification que CI a réussi
+  # ─────────────────────────────────────────────────────────
+  check-ci:
+    name: "Check CI passed"
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    steps:
+      - name: CI Status Check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "CI conclusion : ${{ github.event.workflow_run.conclusion }}"
+            if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+              echo "❌ CI failed — CD annulé"
+              exit 1
+            fi
+          fi
+          echo "✅ CI OK — CD autorisé"
+
+  # ─────────────────────────────────────────────────────────
+  # Job 2 : Build & Push Docker images
+  # ─────────────────────────────────────────────────────────
+  build-and-push:
+    name: "Build & Push Docker Images"
+    runs-on: ubuntu-latest
+    needs: check-ci
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract metadata (tag, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.API_IMAGE }}
+            ${{ env.TRAINER_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push API image
+        uses: docker/build-push-action@v5
+        with:
+          context:    .
+          file:       mlops/docker/Dockerfile.api
+          push:       true
+          tags:       ${{ env.API_IMAGE }}:${{ steps.meta.outputs.version }},${{ env.API_IMAGE }}:latest
+          labels:     ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.run_id }}
+            GIT_COMMIT=${{ github.sha }}
+
+      - name: Build & Push Trainer image
+        uses: docker/build-push-action@v5
+        with:
+          context:    .
+          file:       mlops/docker/Dockerfile.trainer
+          push:       true
+          tags:       ${{ env.TRAINER_IMAGE }}:${{ steps.meta.outputs.version }},${{ env.TRAINER_IMAGE }}:latest
+          labels:     ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ─────────────────────────────────────────────────────────
+  # Job 3 : Déploiement Kubernetes
+  # ─────────────────────────────────────────────────────────
+  deploy-kubernetes:
+    name: "Deploy to Kubernetes"
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment:
+      name: production
+      url: http://ts-forecast.local:8000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.29.0"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+
+      - name: Update image tag in manifests
+        run: |
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          sed -i "s|ts-forecast-api:latest|${{ env.API_IMAGE }}:${IMAGE_TAG}|g" \
+            mlops/kubernetes/deployment.yaml
+
+      - name: Apply ConfigMap
+        run: kubectl apply -f mlops/kubernetes/configmap.yaml
+
+      - name: Apply Service
+        run: kubectl apply -f mlops/kubernetes/service.yaml
+
+      - name: Apply Deployment (rolling update)
+        run: |
+          kubectl apply -f mlops/kubernetes/deployment.yaml
+          # Attendre que le rollout soit terminé (max 5 minutes)
+          kubectl rollout status deployment/ts-forecast-api \
+            --timeout=300s
+
+      - name: Apply HPA
+        run: kubectl apply -f mlops/kubernetes/hpa.yaml
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -l app=ts-forecast
+          kubectl get svc ts-forecast-service
+          kubectl get hpa ts-forecast-hpa
+
+  # ─────────────────────────────────────────────────────────
+  # Job 4 : Smoke Tests post-déploiement
+  # ─────────────────────────────────────────────────────────
+  smoke-tests:
+    name: "Smoke Tests"
+    runs-on: ubuntu-latest
+    needs: deploy-kubernetes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install httpx
+        run: pip install httpx
+
+      - name: Run smoke tests
+        id: smoke
+        run: |
+          python - <<'EOF'
+          import httpx, sys, time
+
+          BASE_URL = "http://ts-forecast.local:8000"
+          MAX_RETRIES = 10
+          RETRY_DELAY = 15  # secondes
+
+          # Health check avec retry
+          for attempt in range(MAX_RETRIES):
+              try:
+                  r = httpx.get(f"{BASE_URL}/health", timeout=10)
+                  if r.status_code == 200:
+                      data = r.json()
+                      assert data["status"] == "ok", f"Status inattendu: {data}"
+                      assert data["model_loaded"], "Modèle non chargé"
+                      print(f"✅ Health OK : {data}")
+                      break
+              except Exception as e:
+                  print(f"⏳ Tentative {attempt+1}/{MAX_RETRIES} : {e}")
+                  if attempt < MAX_RETRIES - 1:
+                      time.sleep(RETRY_DELAY)
+                  else:
+                      print("❌ Health check échoué après tous les essais")
+                      sys.exit(1)
+
+          # Test /predict
+          payload = {
+              "datetime_utc": "2024-06-01T12:00:00",
+              "features": {
+                  "meteo_temperature_2m_lag_24h": 18.5,
+                  "meteo_relative_humidity_2m": 65.0,
+                  "meteo_wind_speed_10m": 12.3,
+                  "hour_sin": 0.0,
+                  "hour_cos": 1.0,
+                  "month_sin": 0.866,
+                  "month_cos": 0.5,
+              }
+          }
+          r = httpx.post(f"{BASE_URL}/predict", json=payload, timeout=10)
+          assert r.status_code == 200, f"Predict failed: {r.status_code} {r.text}"
+          pred = r.json()
+          assert "predicted_temp_24h" in pred
+          assert isinstance(pred["predicted_temp_24h"], float)
+          print(f"✅ Predict OK : {pred['predicted_temp_24h']}°C")
+
+          # Test /metrics (Prometheus)
+          r = httpx.get(f"{BASE_URL}/metrics", timeout=10)
+          assert r.status_code == 200
+          assert "predict_requests_total" in r.text
+          print("✅ Metrics OK")
+
+          print("\n🎉 Tous les smoke tests réussis !")
+          EOF
+
+      - name: Rollback on failure
+        if: failure() && steps.smoke.outcome == 'failure'
+        run: |
+          echo "🔄 Smoke tests échoués — rollback en cours..."
+          kubectl rollout undo deployment/ts-forecast-api
+          kubectl rollout status deployment/ts-forecast-api --timeout=120s
+          echo "✅ Rollback terminé"
+
+  # ─────────────────────────────────────────────────────────
+  # Job 5 : Tag Git de la release
+  # ─────────────────────────────────────────────────────────
+  tag-release:
+    name: "Tag Release"
+    runs-on: ubuntu-latest
+    needs: smoke-tests
+    if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create deployment tag
+        run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          TAG="deploy-${TIMESTAMP}-sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Production deployment $TAG"
+          git push origin "$TAG"
+          echo "✅ Tag créé : $TAG"
