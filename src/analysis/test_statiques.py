@@ -218,8 +218,10 @@ def test_residuals(residuals: pd.Series) -> dict:
     lb = acorr_ljungbox(res, lags=[10, 20, 40], return_df=True)
     lb_p_min = float(lb["lb_pvalue"].min())
     autocorr_ok = lb_p_min > 0.05
+    no_autocorr = "pas d'autocorrélation"
+    autocorr_pb = "autocorrélation résiduelle"
     print(f"  Ljung-Box  p_min={lb_p_min:.4f} "
-          f"→ {'pas d\'autocorrélation' if autocorr_ok else '❌ autocorrélation résiduelle'}")
+          f"→ {no_autocorr if autocorr_ok else autocorr_pb}")
 
     # Shapiro-Wilk (sur échantillon si trop grand)
     sample = res[:5000] if len(res) > 5000 else res
