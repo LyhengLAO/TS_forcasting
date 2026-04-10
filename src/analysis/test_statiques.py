@@ -218,32 +218,28 @@ def test_residuals(residuals: pd.Series) -> dict:
     lb = acorr_ljungbox(res, lags=[10, 20, 40], return_df=True)
     lb_p_min = float(lb["lb_pvalue"].min())
     autocorr_ok = lb_p_min > 0.05
-    no_autocorr = "pas d'autocorrélation"
-    autocorr_pb = "autocorrélation résiduelle"
-    print(f"  Ljung-Box  p_min={lb_p_min:.4f} "
-          f"→ {no_autocorr if autocorr_ok else autocorr_pb}")
+    autocorr_msg = "pas d'autocorrelation" if autocorr_ok else "autocorrelation residuelle"
+    print(f"  Ljung-Box  p_min={lb_p_min:.4f} -> {autocorr_msg}")
 
-    # Shapiro-Wilk (sur échantillon si trop grand)
+    # Shapiro-Wilk
     sample = res[:5000] if len(res) > 5000 else res
     _, sw_p = stats.shapiro(sample)
     normal_ok = sw_p > 0.05
-    normal_str = "normalité"
-    non_normal_str = "non-normalité"
-    print(f"  Shapiro-Wilk p={sw_p:.4f} "
-          f"→ {normal_str if normal_ok else non_normal_str}")
+    normal_msg = "normalite" if normal_ok else "non-normalite"
+    print(f"  Shapiro-Wilk p={sw_p:.4f} -> {normal_msg}")
 
     # Durbin-Watson
     dw = durbin_watson(res)
     dw_ok = 1.5 < dw < 2.5
-    print(f"  Durbin-Watson = {dw:.4f} "
-          f"→ {'pas autocorrélation' if dw_ok else autocorrélation'}")
+    dw_msg = "pas d'autocorrelation" if dw_ok else "autocorrelation"
+    print(f"  Durbin-Watson = {dw:.4f} -> {dw_msg}")
 
     return {
-        "ljung_box_pmin":  lb_p_min,
-        "no_autocorr":     bool(autocorr_ok),
-        "shapiro_pval":    float(sw_p),
+        "ljung_box_pmin":   lb_p_min,
+        "no_autocorr":      bool(autocorr_ok),
+        "shapiro_pval":     float(sw_p),
         "normal_residuals": bool(normal_ok),
-        "durbin_watson":   float(dw),
+        "durbin_watson":    float(dw),
     }
 
 # Pipeline complet
