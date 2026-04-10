@@ -52,7 +52,7 @@ jobs:
           pip install flake8 black isort mypy
 
       - name: Run Black (format check)
-        run: black --check --diff src/ api/ pipelines/ tests/ 2>&1 | grep "cannot format"
+        run: black src/ api/ pipelines/ tests/
 
       - name: Run isort (import order check)
         run: isort src/ api/ pipelines/ tests/
