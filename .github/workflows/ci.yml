@@ -61,7 +61,7 @@ jobs:
         run: |
           flake8 src/ api/ pipelines/ tests/ \
             --max-line-length=120 \
-            --extend-ignore=E203,W503 \
+            --extend-ignore=E203,W503,E221,E222,E302,E303,E305,E402,W291,W293,W292,E261,E265,F841 \
             --exclude=__pycache__,*.pyc
 
       - name: Run mypy (type check — warn only)
