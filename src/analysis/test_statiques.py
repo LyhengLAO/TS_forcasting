@@ -227,8 +227,10 @@ def test_residuals(residuals: pd.Series) -> dict:
     sample = res[:5000] if len(res) > 5000 else res
     _, sw_p = stats.shapiro(sample)
     normal_ok = sw_p > 0.05
+    normal_str = "normalité"
+    non_normal_str = "non-normalité"
     print(f"  Shapiro-Wilk p={sw_p:.4f} "
-          f"→ {'normalité' if normal_ok else 'non-normalité'}")
+          f"→ {normal_str if normal_ok else non_normal_str}")
 
     # Durbin-Watson
     dw = durbin_watson(res)
