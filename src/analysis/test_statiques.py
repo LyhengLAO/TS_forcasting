@@ -234,7 +234,7 @@ def test_residuals(residuals: pd.Series) -> dict:
     dw = durbin_watson(res)
     dw_ok = 1.5 < dw < 2.5
     print(f"  Durbin-Watson = {dw:.4f} "
-          f"→ {'pas d\'autocorrélation' if dw_ok else 'autocorrélation'}")
+          f"→ {'pas autocorrélation' if dw_ok else autocorrélation'}")
 
     return {
         "ljung_box_pmin":  lb_p_min,
