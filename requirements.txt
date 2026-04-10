@@ -56,3 +56,9 @@ flask
 pytest
 pytest-cov
 pytest-asyncio
+
+# ─── Qualité code ─────────────────────────────────────────────
+black
+isort
+flake8
+mypy
