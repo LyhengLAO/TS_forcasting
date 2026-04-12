@@ -1,5 +1,5 @@
 # ============================================================
-# tests/test_statistical.py
+# tests/test_statiques.py
 # Tests unitaires : tests ADF/KPSS, STL, ACF/PACF, Granger
 # ============================================================
 
@@ -60,7 +60,7 @@ def bivariate_df():
 class TestStationarity:
 
     def test_adf_detects_stationary(self, stationary_series):
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         result = test_stationarity(stationary_series)
         assert "adf_stat" in result
         assert "adf_pval" in result
@@ -69,20 +69,20 @@ class TestStationarity:
         assert result["stationary_adf"] is True
 
     def test_adf_detects_nonstationary(self, nonstationary_series):
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         result = test_stationarity(nonstationary_series)
         # Marche aléatoire → non-stationnaire
         assert result["stationary_adf"] is False
 
     def test_result_contains_required_keys(self, stationary_series):
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         result = test_stationarity(stationary_series)
         for key in ["adf_stat", "adf_pval", "kpss_stat", "kpss_pval",
                     "stationary_adf", "stationary_kpss", "conclusion"]:
             assert key in result, f"Clé manquante : {key}"
 
     def test_conclusion_is_string(self, stationary_series):
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         result = test_stationarity(stationary_series)
         assert isinstance(result["conclusion"], str)
         valid_conclusions = {
@@ -92,18 +92,18 @@ class TestStationarity:
         assert result["conclusion"] in valid_conclusions
 
     def test_adf_pval_in_range(self, stationary_series):
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         result = test_stationarity(stationary_series)
         assert 0.0 <= result["adf_pval"] <= 1.0
 
     def test_differencing_recommended_for_random_walk(self, nonstationary_series):
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         result = test_stationarity(nonstationary_series)
         assert result["differencing_recommended"] is True
 
     def test_diff_of_random_walk_is_stationary(self, nonstationary_series):
         """diff(1) d'une marche aléatoire doit être stationnaire."""
-        from src.analysis.statistical_tests import test_stationarity
+        from src.analysis.test_statiques import test_stationarity
         diff_series = nonstationary_series.diff().dropna()
         result = test_stationarity(diff_series)
         assert result["stationary_adf"] is True
@@ -116,7 +116,7 @@ class TestStationarity:
 class TestSTL:
 
     def test_stl_returns_required_keys(self, seasonal_series):
-        from src.analysis.statistical_tests import decompose_stl
+        from src.analysis.test_statiques import decompose_stl
         result = decompose_stl(seasonal_series, period=24, output_dir="/tmp")
         for key in ["period", "seasonal_strength", "trend_strength",
                     "strong_seasonality", "strong_trend"]:
@@ -124,28 +124,28 @@ class TestSTL:
 
     def test_stl_detects_strong_seasonality(self, seasonal_series):
         """Série avec saisonnalité 24h → force > 0.6."""
-        from src.analysis.statistical_tests import decompose_stl
+        from src.analysis.test_statiques import decompose_stl
         result = decompose_stl(seasonal_series, period=24, output_dir="/tmp")
         assert result["seasonal_strength"] > 0.5, (
             f"Force saisonnalité trop faible : {result['seasonal_strength']}"
         )
 
     def test_stl_seasonal_strength_in_range(self, seasonal_series):
-        from src.analysis.statistical_tests import decompose_stl
+        from src.analysis.test_statiques import decompose_stl
         result = decompose_stl(seasonal_series, period=24, output_dir="/tmp")
         assert 0.0 <= result["seasonal_strength"] <= 1.0
         assert 0.0 <= result["trend_strength"]    <= 1.0
 
     def test_stl_wrong_period_still_runs(self, seasonal_series):
         """STL avec mauvaise période ne doit pas crasher."""
-        from src.analysis.statistical_tests import decompose_stl
+        from src.analysis.test_statiques import decompose_stl
         # Période = 12 au lieu de 24 : résultat sous-optimal mais sans crash
         result = decompose_stl(seasonal_series, period=12, output_dir="/tmp")
         assert "seasonal_strength" in result
 
     def test_stl_white_noise_low_seasonality(self, stationary_series):
         """Bruit blanc → faible saisonnalité."""
-        from src.analysis.statistical_tests import decompose_stl
+        from src.analysis.test_statiques import decompose_stl
         result = decompose_stl(stationary_series, period=24, output_dir="/tmp")
         # Le bruit blanc n'a pas de saisonnalité forte
         assert result["seasonal_strength"] < 0.5
@@ -158,7 +158,7 @@ class TestSTL:
 class TestACFPACF:
 
     def test_acf_pacf_returns_suggestions(self, seasonal_series):
-        from src.analysis.statistical_tests import plot_acf_pacf
+        from src.analysis.test_statiques import plot_acf_pacf
         result = plot_acf_pacf(seasonal_series.diff().dropna(),
                                 lags=48, output_dir="/tmp")
         assert "suggested_p" in result
@@ -170,7 +170,7 @@ class TestACFPACF:
 
     def test_acf_white_noise_few_significant_lags(self, stationary_series):
         """Bruit blanc → peu de lags ACF significatifs."""
-        from src.analysis.statistical_tests import plot_acf_pacf
+        from src.analysis.test_statiques import plot_acf_pacf
         result = plot_acf_pacf(stationary_series, lags=48, output_dir="/tmp")
         # Par définition, le bruit blanc a peu de corrélations significatives
         assert result["n_significant_acf"] < 20   # seuil raisonnable
@@ -188,7 +188,7 @@ class TestACFPACF:
         idx    = pd.date_range("2023-01-01", periods=n, freq="h")
         series = pd.Series(x, index=idx)
 
-        from src.analysis.statistical_tests import plot_acf_pacf
+        from src.analysis.test_statiques import plot_acf_pacf
         result = plot_acf_pacf(series, lags=20, output_dir="/tmp")
         # PACF doit couper après lag=1 → p≤5 raisonnable
         assert result["suggested_p"] <= 5
@@ -202,7 +202,7 @@ class TestGrangerCausality:
 
     def test_granger_detects_causality(self, bivariate_df):
         """X cause Y avec délai 2h → Granger doit détecter (p < 0.05)."""
-        from src.analysis.statistical_tests import granger_causality
+        from src.analysis.test_statiques import granger_causality
         result = granger_causality(bivariate_df, "target", ["cause"], max_lag=5)
         assert "cause" in result
         assert result["cause"]["causes_target"] is True
@@ -210,7 +210,7 @@ class TestGrangerCausality:
 
     def test_granger_no_causality_for_independent(self, stationary_series):
         """Deux séries indépendantes → pas de causalité."""
-        from src.analysis.statistical_tests import granger_causality
+        from src.analysis.test_statiques import granger_causality
         rng = np.random.default_rng(99)
         independent = pd.Series(
             rng.normal(0, 1, len(stationary_series)),
@@ -227,13 +227,13 @@ class TestGrangerCausality:
             assert result["independent"]["min_pval"] > 0.01  # seuil lâche
 
     def test_granger_returns_best_lag(self, bivariate_df):
-        from src.analysis.statistical_tests import granger_causality
+        from src.analysis.test_statiques import granger_causality
         result = granger_causality(bivariate_df, "target", ["cause"], max_lag=5)
         assert "best_lag" in result["cause"]
         assert 1 <= result["cause"]["best_lag"] <= 5
 
     def test_granger_returns_pval_in_range(self, bivariate_df):
-        from src.analysis.statistical_tests import granger_causality
+        from src.analysis.test_statiques import granger_causality
         result = granger_causality(bivariate_df, "target", ["cause"], max_lag=5)
         assert 0.0 <= result["cause"]["min_pval"] <= 1.0
 

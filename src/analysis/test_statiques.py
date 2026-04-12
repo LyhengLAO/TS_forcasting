@@ -1,5 +1,5 @@
 # ============================================================
-# src/analysis/statistical_tests.py
+# src/analysis/test_statiques.py
 # Tests statistiques complets pour séries temporelles :
 #   - ADF + KPSS (stationnarité)
 #   - Décomposition STL (Décomposition saisonnière  + tendance + résidus)

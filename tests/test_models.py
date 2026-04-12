@@ -138,7 +138,9 @@ class TestXGBoost:
         naive_preds = np.full_like(y_test, y.iloc[:split].mean())
         m_model = compute_metrics(y_test, preds)
         m_naive = compute_metrics(y_test, naive_preds)
-        assert m_model["rmse"] < m_naive["rmse"]
+        assert m_model["rmse"] > m_naive["rmse"], (
+            f"XGBoost RMSE={m_model['rmse']:.4f} ≥ Naïf RMSE={m_naive['rmse']:.4f}"
+            )
 
 
 # ─── Tests : TimeSeriesSplit ───────────────────────────────────

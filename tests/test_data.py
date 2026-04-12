@@ -16,7 +16,7 @@ import yaml
 @pytest.fixture
 def sample_weather_df():
     """DataFrame météo synthétique pour les tests."""
-    n = 24 * 30   # 30 jours horaires
+    n = 24 * 365 + 1   # 365 jours horaires (1 an minimum requis par validate_weather)
     idx = pd.date_range("2023-01-01", periods=n, freq="h", name="datetime")
     rng = np.random.default_rng(42)
     df = pd.DataFrame({
@@ -127,7 +127,7 @@ class TestPreprocessing:
         df = sample_weather_df.copy()
         # Injecter un outlier
         df.loc[df.index[5], "meteo_temperature_2m"] = 999.0
-        result = remove_outliers_iqr(df, ["meteo_temperature_2m"], factor=3.0)
+        result, _ = remove_outliers_iqr(df, ["meteo_temperature_2m"], factor=3.0)
         assert np.isnan(result.loc[df.index[5], "meteo_temperature_2m"])
 
     def test_impute_time_series_no_large_gaps(self, sample_weather_df):
