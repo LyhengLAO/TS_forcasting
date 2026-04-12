@@ -29,8 +29,8 @@ on:
 
 env:
   REGISTRY:       docker.io
-  API_IMAGE:      ${{ secrets.DOCKER_HUB_TOKEN }}/ts-forecast-api
-  TRAINER_IMAGE:  ${{ secrets.DOCKER_HUB_TOKEN }}/ts-forecast-trainer
+  API_IMAGE:      lyheng320/ts-forecast-api
+  TRAINER_IMAGE:  lyheng320/ts-forecast-trainer
   PYTHON_VERSION: "3.11"
 
 jobs:
