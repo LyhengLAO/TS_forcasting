@@ -20,11 +20,25 @@ class MockModel:
 @pytest.fixture
 def client():
     """Client de test FastAPI avec modèle mocké."""
-    with patch("api.main.MODEL", new=MockModel()), \
-         patch("api.main.mlflow.sklearn.load_model", return_value=MockModel()):
-        from api.main import app
-        with TestClient(app) as c:
-            yield c
+    import api.main
+
+    # Patch APP_STATE directly — MODEL n'existe pas, c'est APP_STATE["model"]
+    original_state = api.main.APP_STATE.copy()
+
+    api.main.APP_STATE.update({
+        "model":         MockModel(),
+        "model_name":    "mock_model",
+        "model_version": "test",
+        "metadata":      {"test_metrics": {"rmse": 1.5}},
+        "feature_names": [],
+        "loaded_at":     "2024-01-01T00:00:00",
+    })
+
+    with TestClient(api.main.app) as c:
+        yield c
+
+    # Restaurer l'état original après chaque test
+    api.main.APP_STATE.update(original_state)
 
 
 @pytest.fixture
@@ -109,7 +123,6 @@ class TestPredict:
         """Features vides → comportement géré sans crash serveur."""
         payload = {"datetime_utc": "2024-01-01T00:00:00", "features": {}}
         resp = client.post("/predict", json=payload)
-        # Peut retourner 200 (prédiction sur vecteur vide) ou 422 (validation Pydantic)
         assert resp.status_code in (200, 422, 500)
 
     def test_predict_invalid_datetime_format(self, client, valid_payload):
@@ -117,7 +130,6 @@ class TestPredict:
         bad = dict(valid_payload)
         bad["datetime_utc"] = "pas-une-date"
         resp = client.post("/predict", json=bad)
-        # FastAPI / Pydantic valide le format string — peut passer si str accepté
         assert resp.status_code in (200, 422)
 
     def test_predict_missing_required_field(self, client):
@@ -139,7 +151,6 @@ class TestMetricsEndpoint:
         assert "text/plain" in resp.headers["content-type"]
 
     def test_metrics_contains_counter(self, client, valid_payload):
-        # D'abord faire une requête pour incrémenter le counter
         client.post("/predict", json=valid_payload)
         resp = client.get("/metrics")
         assert "predict_requests_total" in resp.text
@@ -167,7 +178,7 @@ class TestSecurity:
         extreme = dict(valid_payload)
         extreme["features"] = {k: 1e10 for k in valid_payload["features"]}
         resp = client.post("/predict", json=extreme)
-        assert resp.status_code in (200, 500)   # peut retourner 500 si inf/nan
+        assert resp.status_code in (200, 500)
 
     def test_404_on_unknown_endpoint(self, client):
         resp = client.get("/nonexistent")
