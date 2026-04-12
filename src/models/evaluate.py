@@ -186,10 +186,10 @@ def evaluate_model(
     m = compute_metrics(y_test.values, y_pred)
 
     print(f"\n{'─'*40}")
-    print(f"  RMSE  : {m['rmse']:.4f} °C")
-    print(f"  MAE   : {m['mae']:.4f} °C")
-    print(f"  MAPE  : {m['mape']:.2f} %")
-    print(f"  sMAPE : {m['smape']:.2f} %")
+    print(f"  RMSE  : {m['rmse']:.4f}")
+    print(f"  MAE   : {m['mae']:.4f}")
+    print(f"  MAPE  : {m['mape']:.2f}")
+    print(f"  sMAPE : {m['smape']:.2f}")
     print(f"  R²    : {m['r2']:.4f}")
     print(f"{'─'*40}")
 

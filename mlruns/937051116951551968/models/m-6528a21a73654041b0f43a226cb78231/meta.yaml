@@ -1,0 +1,10 @@
+artifact_location: file:Z:/TS_forcasting/mlruns/937051116951551968/models/m-6528a21a73654041b0f43a226cb78231/artifacts
+creation_timestamp: 1775989905267
+experiment_id: '937051116951551968'
+last_updated_timestamp: 1775989944595
+model_id: m-6528a21a73654041b0f43a226cb78231
+model_type: null
+name: model
+source_run_id: af43ca04e6074185a64fb94cc0fb2260
+status: 2
+status_message: null

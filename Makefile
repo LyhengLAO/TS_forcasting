@@ -116,7 +116,7 @@ engineer: validate preprocess features
 # ─── Analyse statistique ──────────────────────────────────────
 stats:
 	@echo "Tests statistiques..."
-	$(PYTHON) -m src.analysis.statistical_tests
+	$(PYTHON) -m src.analysis.test_statiques
 	@echo "Résultats dans reports/statistical_tests.json"
 
 # ─── Entraînement ─────────────────────────────────────────────

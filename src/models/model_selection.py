@@ -118,14 +118,17 @@ def tune_lstm(X_train: np.ndarray, y_train: np.ndarray,
     arch = cfg["architecture"]
     tr   = cfg["training"]
 
-    hidden_size = arch["hidden_size"]
-    num_layers  = arch["num_layers"]
-    dropout     = arch["dropout"]
-    seq_len     = tr["sequence_length"]
-    epochs      = tr["epochs"]
-    batch_size  = tr["batch_size"]
-    lr          = tr["learning_rate"]
-    patience    = tr["patience"]
+    hidden_size = int(arch["hidden_size"])
+    num_layers  = int(arch["num_layers"])
+    dropout     = float(arch["dropout"])
+    seq_len     = int(tr["sequence_length"])
+    epochs      = int(tr["epochs"])
+    batch_size  = int(tr["batch_size"])
+    lr          = float(tr["learning_rate"])
+    patience    = int(tr["patience"])
+    clip_grad   = float(tr["clip_grad_norm"])
+    weight_decay= float(tr["weight_decay"])
+    T_max       = int(cfg["scheduler"]["T_max"])  # ← probable source du bug
 
     # Préparer séquences
     def make_sequences(X, y, seq_len):
@@ -225,6 +228,59 @@ def tune_lstm(X_train: np.ndarray, y_train: np.ndarray,
         "model_name": "lstm",
     }
 
+# --- Prophet ---
+
+def tune_prophet(df_train: pd.DataFrame, df_val: pd.DataFrame,
+                 target: str, model_cfg: dict) -> dict:
+    try:
+        from prophet import Prophet
+    except ImportError:
+        raise ImportError("Prophet non installé : pip install prophet")
+
+    cfg        = model_cfg["models"]["prophet"]
+    p          = cfg["params"]
+    regressors = cfg.get("add_regressors", [])
+
+    def make_prophet_df(df):
+        pdf = df[[target]].reset_index()
+        pdf.columns = ["ds", "y"]
+        for r in regressors:
+            if r in df.columns:
+                pdf[r] = df[r].values
+        return pdf
+
+    prophet_train = make_prophet_df(df_train)
+    prophet_val   = make_prophet_df(df_val)
+
+    model = Prophet(
+        yearly_seasonality=p.get("yearly_seasonality", True),
+        weekly_seasonality=p.get("weekly_seasonality", True),
+        daily_seasonality=p.get("daily_seasonality",  True),
+        seasonality_mode=p.get("seasonality_mode", "additive"),
+        changepoint_prior_scale=float(p.get("changepoint_prior_scale", 0.05)),
+        seasonality_prior_scale=float(p.get("seasonality_prior_scale", 10.0)),
+        interval_width=float(p.get("interval_width", 0.95)),
+    )
+    for r in regressors:
+        if r in prophet_train.columns:
+            model.add_regressor(r)
+
+    model.fit(prophet_train)
+
+    # Prédiction sur val
+    future = prophet_val[["ds"] + [r for r in regressors if r in prophet_val.columns]]
+    forecast = model.predict(future)
+    preds = forecast["yhat"].values
+
+    m = metrics(prophet_val["y"].values, preds)
+
+    return {
+        "model":       model,
+        "best_params": p,
+        "metrics":     m,
+        "model_name":  "prophet",
+    }
+
 # --- selection finale ---
 def run_model_selection(
     X_train: pd.DataFrame,
@@ -269,6 +325,14 @@ def run_model_selection(
                     X_tr.values, y_tr.values,
                     X_vl.values, y_vl.values,
                     model_cfg, input_size=X_tr.shape[1],
+                )
+
+            elif model_name == "prophet":
+                res = tune_prophet(
+                    df_train=X_tr.assign(**{y_tr.name: y_tr}),
+                    df_val=X_vl.assign(**{y_vl.name: y_vl}),
+                    target=y_tr.name,
+                    model_cfg=model_cfg,
                 )
             else:
                 print(f"Modèle inconnu : {model_name} — ignoré")

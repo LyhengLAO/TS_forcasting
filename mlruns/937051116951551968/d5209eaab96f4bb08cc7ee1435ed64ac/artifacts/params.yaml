@@ -1,0 +1,54 @@
+# ============================================================
+# params.yaml — Hyperparamètres versionnés par DVC
+# Ce fichier est mis à jour automatiquement après chaque run
+# Optuna. Committé avec Git + taggé avec DVC pour reproductibilité
+# complète.
+#
+# NE PAS MODIFIER MANUELLEMENT — utiliser make train
+# ============================================================
+
+prepare:
+  train_ratio: 0.80
+  val_ratio:   0.10
+  horizon_hours: 24
+  seed: 42
+
+featurize:
+  lags:            [1, 2, 3, 6, 12, 24, 48, 72, 168]
+  rolling_windows: [6, 24, 168]
+  diff_orders:     [1, 24, 168]
+  cyclical:        true
+
+train:
+  model: "xgboost"    # modèle sélectionné après comparaison
+  xgboost:
+    n_estimators:      500
+    learning_rate:     0.0523
+    max_depth:         6
+    subsample:         0.812
+    colsample_bytree:  0.763
+    min_child_weight:  3
+    gamma:             0.087
+    reg_alpha:         0.0142
+    reg_lambda:        0.987
+    random_state:      42
+  sarima:
+    order:          [2, 1, 2]
+    seasonal_order: [1, 1, 1, 24]
+  lstm:
+    hidden_size:    128
+    num_layers:     2
+    dropout:        0.20
+    epochs:         100
+    batch_size:     64
+    learning_rate:  0.001
+    sequence_length: 48
+
+evaluate:
+  metrics:
+    - rmse
+    - mae
+    - mape
+    - r2
+  n_cv_splits: 5
+  cv_gap_hours: 24

@@ -140,14 +140,18 @@ def plot_acf_pacf(series: pd.Series, lags: int = 72,
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     clean = series.dropna()
 
-    acf_vals  = acf(clean,  nlags=lags, alpha=0.05, fft=True)
-    pacf_vals = pacf(clean, nlags=lags, alpha=0.05)
+    acf_vals,  acf_ci  = acf(clean,  nlags=lags, alpha=0.05, fft=True)
+    pacf_vals, pacf_ci = pacf(clean, nlags=lags, alpha=0.05)
 
     conf_level = 1.96 / np.sqrt(len(clean))
 
     # Suggestions d'ordres
-    sig_acf  = [i for i, v in enumerate(acf_vals[1:], 1) if abs(v) < conf_level]
-    sig_pacf = [i for i, v in enumerate(pacf_vals[1:], 1) if abs(v) < conf_level]
+    acf_sig_mask  = np.abs(acf_vals[1:])  > conf_level
+    pacf_sig_mask = np.abs(pacf_vals[1:]) > conf_level
+
+    sig_acf  = [i + 1 for i, m in enumerate(acf_sig_mask)  if m]
+    sig_pacf = [i + 1 for i, m in enumerate(pacf_sig_mask) if m]
+
     suggested_q = sig_acf[-1]  if sig_acf  else 0
     suggested_p = sig_pacf[-1] if sig_pacf else 0
 

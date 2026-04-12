@@ -235,7 +235,7 @@ def run_training(
     data = load_datasets(cfg)
 
     # Sélection du modèle
-    from src.models.select import run_model_selection
+    from src.models.model_selection import run_model_selection
     best = run_model_selection(
         X_train=data["X_train"], y_train=data["y_train"],
         X_test=data["X_val"],   y_test=data["y_val"],
@@ -289,7 +289,7 @@ def run_training(
             if best["model_name"] == "xgboost":
                 mlflow.sklearn.log_model(
                     sk_model=best["model"],
-                    artifact_path="model",
+                    name="model",
                     registered_model_name=cfg["mlflow"]["model_name"],
                     input_example=data["X_test"].iloc[:3],
                 )

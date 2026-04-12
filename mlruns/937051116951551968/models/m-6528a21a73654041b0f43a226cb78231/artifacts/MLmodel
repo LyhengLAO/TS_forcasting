@@ -1,0 +1,106 @@
+artifact_path: file:Z:/TS_forcasting/mlruns/937051116951551968/models/m-6528a21a73654041b0f43a226cb78231/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.13.2
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+is_signature_from_type_hint: false
+mlflow_version: 3.10.1
+model_id: m-6528a21a73654041b0f43a226cb78231
+model_size_bytes: 210740
+model_uuid: m-6528a21a73654041b0f43a226cb78231
+prompts: null
+run_id: af43ca04e6074185a64fb94cc0fb2260
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+signature:
+  inputs: '[{"type": "double", "name": "meteo_relative_humidity_2m", "required": true},
+    {"type": "double", "name": "meteo_wind_speed_10m", "required": true}, {"type":
+    "double", "name": "meteo_precipitation", "required": true}, {"type": "double",
+    "name": "meteo_surface_pressure", "required": true}, {"type": "double", "name":
+    "meteo_shortwave_radiation", "required": true}, {"type": "double", "name": "meteo_cloudcover",
+    "required": true}, {"type": "double", "name": "meteo_et0_fao_evapotranspiration",
+    "required": true}, {"type": "double", "name": "fin_fchi_close", "required": true},
+    {"type": "double", "name": "fin_fchi_high", "required": true}, {"type": "double",
+    "name": "fin_fchi_low", "required": true}, {"type": "double", "name": "fin_fchi_open",
+    "required": true}, {"type": "double", "name": "fin_fchi_volume", "required": true},
+    {"type": "double", "name": "fin_tte_pa_close", "required": true}, {"type": "double",
+    "name": "fin_tte_pa_high", "required": true}, {"type": "double", "name": "fin_tte_pa_low",
+    "required": true}, {"type": "double", "name": "fin_tte_pa_open", "required": true},
+    {"type": "double", "name": "fin_tte_pa_volume", "required": true}, {"type": "double",
+    "name": "fin_gspc_close", "required": true}, {"type": "double", "name": "fin_gspc_high",
+    "required": true}, {"type": "double", "name": "fin_gspc_low", "required": true},
+    {"type": "double", "name": "fin_gspc_open", "required": true}, {"type": "double",
+    "name": "fin_gspc_volume", "required": true}, {"type": "double", "name": "hour_sin",
+    "required": true}, {"type": "double", "name": "hour_cos", "required": true}, {"type":
+    "double", "name": "dow_sin", "required": true}, {"type": "double", "name": "dow_cos",
+    "required": true}, {"type": "double", "name": "month_sin", "required": true},
+    {"type": "double", "name": "month_cos", "required": true}, {"type": "double",
+    "name": "doy_sin", "required": true}, {"type": "double", "name": "doy_cos", "required":
+    true}, {"type": "integer", "name": "is_weekend", "required": true}, {"type": "integer",
+    "name": "is_daytime", "required": true}, {"type": "integer", "name": "is_morning",
+    "required": true}, {"type": "integer", "name": "is_afternoon", "required": true},
+    {"type": "integer", "name": "season", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_lag_1h", "required": true}, {"type": "double", "name": "meteo_temperature_2m_lag_2h",
+    "required": true}, {"type": "double", "name": "meteo_temperature_2m_lag_3h", "required":
+    true}, {"type": "double", "name": "meteo_temperature_2m_lag_6h", "required": true},
+    {"type": "double", "name": "meteo_temperature_2m_lag_12h", "required": true},
+    {"type": "double", "name": "meteo_temperature_2m_lag_24h", "required": true},
+    {"type": "double", "name": "meteo_temperature_2m_lag_48h", "required": true},
+    {"type": "double", "name": "meteo_temperature_2m_lag_72h", "required": true},
+    {"type": "double", "name": "meteo_temperature_2m_lag_168h", "required": true},
+    {"type": "double", "name": "meteo_relative_humidity_2m_lag_1h", "required": true},
+    {"type": "double", "name": "meteo_relative_humidity_2m_lag_6h", "required": true},
+    {"type": "double", "name": "meteo_relative_humidity_2m_lag_24h", "required": true},
+    {"type": "double", "name": "meteo_wind_speed_10m_lag_1h", "required": true}, {"type":
+    "double", "name": "meteo_wind_speed_10m_lag_6h", "required": true}, {"type": "double",
+    "name": "meteo_wind_speed_10m_lag_24h", "required": true}, {"type": "double",
+    "name": "meteo_shortwave_radiation_lag_1h", "required": true}, {"type": "double",
+    "name": "meteo_shortwave_radiation_lag_6h", "required": true}, {"type": "double",
+    "name": "meteo_shortwave_radiation_lag_24h", "required": true}, {"type": "double",
+    "name": "meteo_temperature_2m_roll_mean_6h", "required": true}, {"type": "double",
+    "name": "meteo_temperature_2m_roll_std_6h", "required": true}, {"type": "double",
+    "name": "meteo_temperature_2m_roll_min_6h", "required": true}, {"type": "double",
+    "name": "meteo_temperature_2m_roll_max_6h", "required": true}, {"type": "double",
+    "name": "meteo_temperature_2m_roll_range_6h", "required": true}, {"type": "double",
+    "name": "meteo_temperature_2m_ewm_6h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_mean_24h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_std_24h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_min_24h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_max_24h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_range_24h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_ewm_24h", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_mean_7d", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_std_7d", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_min_7d", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_max_7d", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_roll_range_7d", "required": true}, {"type": "double", "name":
+    "meteo_temperature_2m_ewm_7d", "required": true}, {"type": "double", "name": "meteo_temperature_2m_diff_1h",
+    "required": true}, {"type": "double", "name": "meteo_temperature_2m_pct_1h", "required":
+    true}, {"type": "double", "name": "meteo_temperature_2m_diff_24h", "required":
+    true}, {"type": "double", "name": "meteo_temperature_2m_pct_24h", "required":
+    true}, {"type": "double", "name": "meteo_temperature_2m_diff_7d", "required":
+    true}, {"type": "double", "name": "meteo_temperature_2m_pct_7d", "required": true},
+    {"type": "double", "name": "meteo_humidex", "required": true}, {"type": "double",
+    "name": "meteo_windchill", "required": true}, {"type": "double", "name": "meteo_apparent_temp",
+    "required": true}, {"type": "double", "name": "meteo_radiation_norm", "required":
+    true}, {"type": "double", "name": "interaction_temp_x_hum", "required": true},
+    {"type": "double", "name": "interaction_temp_x_wind", "required": true}, {"type":
+    "double", "name": "interaction_rad_x_cloud", "required": true}]'
+  outputs: '[{"type": "float", "required": true}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-04-12 10:31:46.794367'

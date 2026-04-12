@@ -43,6 +43,7 @@ optuna
 # --- monitoring & drift detection ---
 evidently
 prometheus-client
+prefect
 
 # --- versioning & deployment ---
 dvc

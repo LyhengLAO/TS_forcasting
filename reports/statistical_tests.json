@@ -1,0 +1,11 @@
+{
+  "series_name": "meteo_temperature_2m",
+  "adf_stat": -7.659351670327765,
+  "adf_pval": 1.705004876805352e-11,
+  "kpss_stat": 0.3272593580030521,
+  "kpss_pval": 0.1,
+  "stationary_adf": true,
+  "stationary_kpss": true,
+  "conclusion": "STATIONNAIRE",
+  "differencing_recommended": false
+}

@@ -1,0 +1,14 @@
+artifact_uri: file:Z:/TS_forcasting/mlruns/937051116951551968/af43ca04e6074185a64fb94cc0fb2260/artifacts
+end_time: 1775989944714
+entry_point_name: ''
+experiment_id: '937051116951551968'
+lifecycle_stage: active
+run_id: af43ca04e6074185a64fb94cc0fb2260
+run_name: best_xgboost
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1775989903882
+status: 3
+tags: []
+user_id: Neo

@@ -1,0 +1,16 @@
+creation_timestamp: 1775989944655
+current_stage: None
+deployment_job_state: null
+description: null
+last_updated_timestamp: 1775989944655
+model_id: m-6528a21a73654041b0f43a226cb78231
+name: ts-forecast-xgb
+run_id: af43ca04e6074185a64fb94cc0fb2260
+run_link: null
+source: models:/m-6528a21a73654041b0f43a226cb78231
+status: READY
+status_message: null
+storage_location: file:Z:/TS_forcasting/mlruns/937051116951551968/models/m-6528a21a73654041b0f43a226cb78231/artifacts
+user_id: null
+version: 1
+workspace: default

@@ -1,0 +1,7 @@
+artifact_location: file:Z:/TS_forcasting/mlruns/937051116951551968
+creation_time: 1775989894338
+experiment_id: '937051116951551968'
+last_update_time: 1775989894338
+lifecycle_stage: active
+name: ts-forecast
+workspace: default

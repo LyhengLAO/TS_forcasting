@@ -41,7 +41,7 @@ def task_load_data(config_path: str) -> dict:
 def task_statistical_tests(data: dict) -> dict:
     logger = get_run_logger()
     logger.info("Tests statistiques...")
-    from src.analysis.statistical_tests import (
+    from src.analysis.test_statiques import (
         test_stationarity, decompose_stl, granger_causality
     )
     cfg    = data["cfg"]
@@ -78,7 +78,7 @@ def task_statistical_tests(data: dict) -> dict:
 def task_select_model(data: dict, model_config_path: str) -> dict:
     logger = get_run_logger()
     logger.info("🔎  Sélection du meilleur modèle via Optuna...")
-    from src.models.select import run_model_selection
+    from src.models.model_selection import run_model_selection
     with open(model_config_path) as f:
         model_cfg = yaml.safe_load(f)
 
