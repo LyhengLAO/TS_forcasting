@@ -29,8 +29,8 @@ on:
 
 env:
   REGISTRY:       docker.io
-  API_IMAGE:      ${{ secrets.DOCKER_HUB_TOKEN }}/ts-forecast-api
-  TRAINER_IMAGE:  ${{ secrets.DOCKER_HUB_TOKEN }}/ts-forecast-trainer
+  API_IMAGE:      lyheng320/ts-forecast-api
+  TRAINER_IMAGE:  lyheng320/ts-forecast-trainer
   PYTHON_VERSION: "3.11"
 
 jobs:
@@ -96,7 +96,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context:    .
-          file:       mlops/docker/Dockerfile.api
+          file:       mlops/docker/Dockerfile
           push:       true
           tags:       ${{ env.API_IMAGE }}:${{ steps.meta.outputs.version }},${{ env.API_IMAGE }}:latest
           labels:     ${{ steps.meta.outputs.labels }}
@@ -110,7 +110,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context:    .
-          file:       mlops/docker/Dockerfile.trainer
+          file:       mlops/docker/Dockerfile.traner
           push:       true
           tags:       ${{ env.TRAINER_IMAGE }}:${{ steps.meta.outputs.version }},${{ env.TRAINER_IMAGE }}:latest
           labels:     ${{ steps.meta.outputs.labels }}
