@@ -189,7 +189,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: mlops/docker/Dockerfile.api
+          file: mlops/docker/Dockerfile
           push: false
           tags: ts-forecast-api:ci-test
           cache-from: type=gha
