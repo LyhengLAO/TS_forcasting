@@ -62,7 +62,7 @@ class TestCollect:
 
     def test_load_config(self):
         """Config chargeable sans erreur."""
-        from src.data.collect import load_config
+        from src.data.data_collect import load_config
         cfg = load_config("configs/config.yaml")
         assert "openmeteo" in cfg
         assert "yfinance" in cfg
